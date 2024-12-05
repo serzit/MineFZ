@@ -10,6 +10,7 @@ import threading  # Для многозадачности
 # Параметры
 player_template_path = 'player.png'  # Изображение игрока в бою
 icon_template_path = 'player_icon.png'  # Изображение иконки игрока в шахте
+hex_template_path = 'empty_hex.png'  # Шаблон свободного гекса
 click_offset = -50  # Начальное смещение для клика (левее)
 ahk_scripts_path = r'C:\Bot\Core\HotKeys'  # Путь к AHK-скриптам
 
@@ -24,7 +25,7 @@ stop_program = False
 game_window_found = False  # Флаг, указывающий, найдено ли окно игры
 
 # Проверка наличия шаблонов
-for template_path in [player_template_path, icon_template_path]:
+for template_path in [player_template_path, icon_template_path, hex_template_path]:
     if not cv2.haveImageReader(template_path):
         raise FileNotFoundError(f"Шаблон не найден: {template_path}")
 
@@ -38,7 +39,7 @@ def run_ahk_script(key):
         print(f"Ошибка при запуске {key}.ahk: {e}")
         return False
 
-def find_image_on_screen(template_path, threshold=0.8):
+def find_image_on_screen(template_path, threshold=0.7):
     """Находит положение изображения на экране."""
     screenshot = pyautogui.screenshot()
     screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
@@ -59,7 +60,7 @@ def find_image_on_screen(template_path, threshold=0.8):
     if max_val >= threshold:
         return max_loc  # Верхний левый угол найденного изображения
     return None
-
+    
 def click_relative_to_icon(icon_pos, offset_x):
     """Кликает относительно найденной иконки."""
     if icon_pos:
@@ -134,9 +135,9 @@ def handle_battle():
 
         # Если стич уже вызван, начинаем цикл атак
         if stitch_summoned:
-            for _ in range(20):
+            for _ in range(8):
                 print("Нажимаем 'д' и 'enter'")
-                time.sleep(0.3)
+                time.sleep(0.2)
                 run_ahk_script('d')
                 run_ahk_script('enter')
 
@@ -144,14 +145,16 @@ def handle_battle():
         stitch_summoned = False  # Сбрасываем состояние для следующего боя
         current_state = STATE_MINE  # Переходим в шахту
 
-
 def handle_mine():
     """Обработка состояния 'В ШАХТЕ'."""
     global click_offset, current_state
+    
     time.sleep(0.2)
-    icon_position = find_image_on_screen(icon_template_path)
+    
     for _ in range(3):
-         run_ahk_script('enter')
+        run_ahk_script('enter')
+        
+    icon_position = find_image_on_screen(icon_template_path)
     if icon_position:
         click_relative_to_icon(icon_position, click_offset)
         click_offset = -50 if click_offset > 0 else 100  # Чередование направлений
@@ -186,7 +189,6 @@ while not stop_program:
         break  # Завершаем основной цикл, если установлен флаг остановки
 
     if not activate_game_window():
-        time.sleep(2)
         continue
 
     states[current_state]()
