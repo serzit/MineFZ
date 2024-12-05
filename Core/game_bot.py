@@ -105,6 +105,7 @@ def summon_around_player(player_pos, hex_template_path):
         print(f"Свободный гекс найден на координатах: {free_hex}")
         # Зажимаем CTRL, перемещаем мышку и кликаем
         run_ahk_script('ctrlDown')  # Зажимаем CTRL
+        time.sleep(0.2)
         try:
             pyautogui.moveTo(free_hex[0], free_hex[1])  # Перемещаем курсор в свободный гекс
             run_ahk_script('clickLeft')  # Кликаем
@@ -115,7 +116,7 @@ def summon_around_player(player_pos, hex_template_path):
         print("Свободных гексов не найдено. Стич не вызван.")
 
 
-def is_hex_free(check_x, check_y, template_path, region_size=50):
+def is_hex_free(check_x, check_y, template_path, region_size=30):
     """Проверка, является ли гекс пустым, используя шаблон."""
     # Снимаем скриншот и преобразуем в numpy массив
     screenshot = pyautogui.screenshot()
@@ -139,11 +140,11 @@ def is_hex_free(check_x, check_y, template_path, region_size=50):
     result = cv2.matchTemplate(region, template, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, _ = cv2.minMaxLoc(result)
     print(f"Совпадение с шаблоном для региона ({region_x1}, {region_y1}, {region_x2}, {region_y2}): {max_val}")
-    return max_val >= 0.45  # Совпадение более 45% означает, что гекс пустой
+    return max_val >= 0.2  # Совпадение более 80% означает, что гекс пустой
 
 
 def check_hexes_around_player(player_pos, hex_template_path):
-    """Проверяем 6 гексов вокруг игрока на пустоту."""
+    """Проверяем 6 гексов вокруг игрока на пустоту и возвращаем координаты с наибольшим совпадением."""
     x, y = player_pos
     x += 25  # Сдвигаем центр координат на игрока
     y += 25
@@ -152,26 +153,34 @@ def check_hexes_around_player(player_pos, hex_template_path):
 
     # Смещения для 6 гексов вокруг
     hex_offsets = [
+        (25, -25),   # Правый-верхний гекс
         (-50, 0),    # Левый гекс
         (50, 0),     # Правый гекс
-        (25, 25),    # Правый-нижний гекс
         (-25, 25),   # Левый-нижний гекс
-        (25, -25),   # Правый-верхний гекс
         (-25, -25),  # Левый-верхний гекс
+        (25, 25),    # Правый-нижний гекс
     ]
+
+    best_match = -1  # Изначально наилучшее совпадение - отсутствует
+    best_coordinates = None  # Изначально координаты не определены
 
     for counter, (dx, dy) in enumerate(hex_offsets, start=1):
         check_x, check_y = x + dx, y + dy
         print(f"Проверка {counter} на гекс с координатами: ({check_x}, {check_y})")
 
         # Проверяем, пустой ли гекс
-        if is_hex_free(check_x, check_y, hex_template_path):
-            print(f"Пустой гекс найден на координатах: ({check_x}, {check_y})")
-            return (check_x, check_y)  # Возвращаем координаты первого найденного пустого гекса
+        match_val = is_hex_free(check_x, check_y, hex_template_path)
+        if match_val:  # Если гекс свободен, ищем максимальное совпадение
+            if match_val > best_match:
+                best_match = match_val
+                best_coordinates = (check_x, check_y)
+                print(f"Найден гекс с лучшим совпадением на координатах: ({check_x}, {check_y})")
 
-    print("Свободных гексов не найдено.")
-    return None  # Если не нашли пустой гекс
-
+    if best_coordinates:
+        print(f"Гекс с наибольшим совпадением найден на координатах: {best_coordinates}")
+    else:
+        print("Свободных гексов не найдено.")
+    return best_coordinates  # Возвращаем координаты гекса с наибольшим совпадением
 
 
 def handle_battle():
@@ -196,9 +205,18 @@ def handle_battle():
         else:
             print("Стич уже вызван, продолжаем бой.")
 
+        run_ahk_script('4')
+
+        if stitch_summoned:
+            for _ in range(8):
+                print("Нажимаем 'д' и 'enter'")
+                time.sleep(0.2)
+                run_ahk_script('d')
+                run_ahk_script('enter')
+
         print("Бой завершен, возвращаемся в шахту.")
-        stitch_summoned = False  # Сбрасываем состояние для следующего боя
         current_state = STATE_MINE  # Переходим в шахту
+        stitch_summoned = False  # Сбрасываем состояние для следующего боя
 
 def handle_mine():
     """Обработка состояния 'В ШАХТЕ'."""
@@ -213,10 +231,8 @@ def handle_mine():
     if icon_position:
         click_relative_to_icon(icon_position, click_offset)
         click_offset = -50 if click_offset > 0 else 100  # Чередование направлений
-        print("Перемещаемся по шахте")
-    else:
-        print("Иконка игрока в шахте не найдена.")
         current_state = STATE_BATTLE  # Переходим к поиску боя
+        print("Перемещаемся по шахте")
 
 # Функция для отслеживания нажатия клавиши 'S'
 def listen_for_stop():
