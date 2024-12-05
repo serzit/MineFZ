@@ -39,7 +39,7 @@ def run_ahk_script(key):
         print(f"Ошибка при запуске {key}.ahk: {e}")
         return False
 
-def find_image_on_screen(template_path, threshold=0.7):
+def find_image_on_screen(template_path, threshold=0.6):
     """Находит положение изображения на экране."""
     screenshot = pyautogui.screenshot()
     screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
@@ -87,28 +87,91 @@ def activate_game_window():
         print("Окно с названием 'TimeZero' не найдено.")
         return False
 
-def summon_around_player(player_pos):
-    """Вызов суммона вокруг игрока с зажатым CTRL (кликаем только один раз)."""
-    global stitch_summoned  # Убедимся, что используем глобальную переменную
+def summon_around_player(player_pos, hex_template_path):
+    """
+    Вызывает суммона вокруг игрока. Если найден свободный гекс, зажимается CTRL, курсор перемещается
+    в точку свободного гекса, происходит клик, и CTRL отпускается.
+    """
+    global stitch_summoned  # Используем глобальную переменную
     if stitch_summoned:
-        return  # Если стич уже вызван, не делаем ничего
+        print("Стич уже вызван.")
+        return  # Если стич уже вызван, ничего не делаем
 
+    # Проверяем гексы вокруг игрока
+    free_hex = check_hexes_around_player(player_pos, hex_template_path)
+    print(f"Результат проверки гексов: {free_hex}")  # Лог результата проверки
+
+    if free_hex is not None:
+        print(f"Свободный гекс найден на координатах: {free_hex}")
+        # Зажимаем CTRL, перемещаем мышку и кликаем
+        run_ahk_script('ctrlDown')  # Зажимаем CTRL
+        try:
+            pyautogui.moveTo(free_hex[0], free_hex[1])  # Перемещаем курсор в свободный гекс
+            run_ahk_script('clickLeft')  # Кликаем
+            stitch_summoned = True  # Помечаем, что стич был вызван
+        finally:
+            run_ahk_script('ctrlUp')  # Отпускаем CTRL
+    else:
+        print("Свободных гексов не найдено. Стич не вызван.")
+
+
+def is_hex_free(check_x, check_y, template_path, region_size=50):
+    """Проверка, является ли гекс пустым, используя шаблон."""
+    # Снимаем скриншот и преобразуем в numpy массив
+    screenshot = pyautogui.screenshot()
+    screenshot_np = np.array(screenshot)
+    template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)  # Загружаем шаблон
+
+    # Преобразуем скриншот в оттенки серого
+    screenshot_gray = cv2.cvtColor(screenshot_np, cv2.COLOR_BGR2GRAY)
+
+    # Определяем регион вокруг координат
+    region_x1, region_y1 = max(0, check_x - region_size), max(0, check_y - region_size)
+    region_x2, region_y2 = check_x + region_size, check_y + region_size
+
+    # Проверяем границы изображения
+    region = screenshot_gray[region_y1:region_y2, region_x1:region_x2]
+    if region.shape[0] == 0 or region.shape[1] == 0:
+        print(f"Область ({region_x1}, {region_y1}, {region_x2}, {region_y2}) вне экрана.")
+        return False
+
+    # Сравниваем с шаблоном
+    result = cv2.matchTemplate(region, template, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, _ = cv2.minMaxLoc(result)
+    print(f"Совпадение с шаблоном для региона ({region_x1}, {region_y1}, {region_x2}, {region_y2}): {max_val}")
+    return max_val >= 0.45  # Совпадение более 45% означает, что гекс пустой
+
+
+def check_hexes_around_player(player_pos, hex_template_path):
+    """Проверяем 6 гексов вокруг игрока на пустоту."""
     x, y = player_pos
-    radius = 25  # Радиус области вокруг игрока
+    x += 25  # Сдвигаем центр координат на игрока
+    y += 25
 
-    run_ahk_script('ctrlDown')  # Зажимаем CTRL
-    try:
-        for dx in range(-radius, radius + 1, 20):
-            for dy in range(-radius, radius + 1, 20):
-                if dx**2 + dy**2 <= radius**2:
-                    pyautogui.moveTo(x + dx, y + dy)
-                    run_ahk_script('clickLeft')  # Кликаем один раз
-                    print("Вызов стича")
-                    stitch_summoned = True  # Помечаем, что стич был вызван
-                    time.sleep(0.2)
-                    return  # Выход из функции после первого клика, чтобы не кликать снова
-    finally:
-        run_ahk_script('ctrlUp')  # Отпускаем CTRL
+    print(f"Координаты игрока: ({x}, {y})")  # Выводим координаты игрока
+
+    # Смещения для 6 гексов вокруг
+    hex_offsets = [
+        (-50, 0),    # Левый гекс
+        (50, 0),     # Правый гекс
+        (25, 25),    # Правый-нижний гекс
+        (-25, 25),   # Левый-нижний гекс
+        (25, -25),   # Правый-верхний гекс
+        (-25, -25),  # Левый-верхний гекс
+    ]
+
+    for counter, (dx, dy) in enumerate(hex_offsets, start=1):
+        check_x, check_y = x + dx, y + dy
+        print(f"Проверка {counter} на гекс с координатами: ({check_x}, {check_y})")
+
+        # Проверяем, пустой ли гекс
+        if is_hex_free(check_x, check_y, hex_template_path):
+            print(f"Пустой гекс найден на координатах: ({check_x}, {check_y})")
+            return (check_x, check_y)  # Возвращаем координаты первого найденного пустого гекса
+
+    print("Свободных гексов не найдено.")
+    return None  # Если не нашли пустой гекс
+
 
 
 def handle_battle():
@@ -129,17 +192,9 @@ def handle_battle():
        
         if not stitch_summoned:
             print("Вызов стича...")
-            summon_around_player(player_position)  # Вызываем стича
+            summon_around_player(player_position, hex_template_path)
         else:
             print("Стич уже вызван, продолжаем бой.")
-
-        # Если стич уже вызван, начинаем цикл атак
-        if stitch_summoned:
-            for _ in range(8):
-                print("Нажимаем 'д' и 'enter'")
-                time.sleep(0.2)
-                run_ahk_script('d')
-                run_ahk_script('enter')
 
         print("Бой завершен, возвращаемся в шахту.")
         stitch_summoned = False  # Сбрасываем состояние для следующего боя
