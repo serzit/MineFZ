@@ -1,4 +1,6 @@
 import time
+from time import sleep
+
 import cv2
 import numpy as np
 import pygetwindow as gw
@@ -9,7 +11,7 @@ import threading  # Для многозадачности
 
 # Параметры
 player_template_path = 'player.png'  # Изображение игрока в бою
-alt_icons = ["player_alt.png", "player_alt2.png", "player_alt3.png", "player_alt4.png", "player_fullBlack.png", "player_black_bottom.png","player_black_left.png"]
+alt_icons = ["player_alt.png", "player_alt2.png", "player_alt3.png", "player_alt4.png", "player_alt5.png", "player_alt6.png", "player_alt7.png", "player_alt8.png", "player_alt9.png", "player_alt10.png" ,"player_alt11.png","player_fullBlack.png", "player_black_bottom.png","player_black_left.png"]
 
 icon_template_path = 'player_icon.png'  # Изображение иконки игрока в шахте
 hex_template_path = 'empty_hex.png'  # Шаблон свободного гекса
@@ -57,6 +59,7 @@ def find_image_on_screen(screenshot_path, threshold=0.8, max_attempts=6, alt_tem
     :param alt_template_paths: Список путей к альтернативным шаблонам (опционально)
     :return: Координаты верхнего левого угла найденного изображения или None
     """
+    global stop_program
 
     # Функция поиска шаблона в изображении
     def search_template(template_path, search_area, threshold):
@@ -83,10 +86,10 @@ def find_image_on_screen(screenshot_path, threshold=0.8, max_attempts=6, alt_tem
         left_half = screenshot[:, :width // 2]
 
         max_val, max_loc = search_template(screenshot_path, left_half, threshold)
-        print(f"Качество основного изображения: {max_val}")
+        print(f"Совпадение основного изображения: {max_val}")
         if max_val >= threshold:
             print(f"Изображение найдено на попытке {attempt + 1}")
-            print(f"Качество изображения: {max_val}")
+            print(f"Совпадение изображения: {max_val}")
             return max_loc
 
     print("Основное изображение не найдено.")
@@ -100,13 +103,14 @@ def find_image_on_screen(screenshot_path, threshold=0.8, max_attempts=6, alt_tem
 
             left_half = screenshot[:, :width // 2]  # Ограничиваем область поиска
             max_val, max_loc = search_template(alt_path, left_half, threshold)
-
+            print(f"Совпадение альтернативного изображения: {max_val}")
             if max_val >= threshold:
                 print(f"Альтернативное изображение найдено: {alt_path}")
-                print(f"Качество изображения: {max_val}")
+                print(f"Совпадение изображения: {max_val}")
                 return max_loc
 
     print("Изображение не найдено ни в основном, ни в альтернативных шаблонах.")
+    stop_program = True
     return None
     
 def click_relative_to_icon(icon_pos, offset_x):
@@ -207,10 +211,9 @@ def check_hexes_around_player(player_pos, hex_template_path):
     # Смещения для 6 гексов вокруг
     hex_offsets = [
         (30, -30),   # Правый-верхний гекс
-        (-50, 0),    # Левый гекс
+        (-40, 0),    # Левый гекс
         (50, 5),     # Правый гекс
         (-25, 25),   # Левый-нижний гекс
-        (25, 25),    # Правый-нижний гекс
     ]
 
     best_match = -1  # Изначально наилучшее совпадение - отсутствует
@@ -243,9 +246,12 @@ def handle_battle():
     global current_state, stitch_summoned
     player_position = find_image_on_screen(
         screenshot_path=player_template_path,  # Основной шаблон
-        threshold=0.8,  # Порог совпадения
+        threshold=0.85,  # Порог совпадения
         alt_template_paths=alt_icons  # Альтернативные шаблоны
     )
+
+    run_ahk_script('d')
+    time.sleep(0.2)
 
     if player_position:
         run_ahk_script('1')
@@ -285,6 +291,7 @@ def handle_mine():
     icon_position = find_image_on_screen(icon_template_path)
     if icon_position:
         click_relative_to_icon(icon_position, click_offset)
+        run_ahk_script('enter')
         click_offset = -50 if click_offset > 0 else 100  # Чередование направлений
         current_state = STATE_BATTLE  # Переходим к поиску боя
         print("Перемещаемся по шахте")
