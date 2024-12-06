@@ -9,7 +9,7 @@ import threading  # Для многозадачности
 
 # Параметры
 player_template_path = 'player.png'  # Изображение игрока в бою
-alt_icons = ["player_fullBlack.png", "player_black_left.png", "player_black_bottom.png"]
+alt_icons = ["player_alt.png", "player_alt2.png", "player_alt3.png", "player_alt4.png", "player_fullBlack.png", "player_black_bottom.png","player_black_left.png"]
 
 icon_template_path = 'player_icon.png'  # Изображение иконки игрока в шахте
 hex_template_path = 'empty_hex.png'  # Шаблон свободного гекса
@@ -44,7 +44,7 @@ def run_ahk_script(key):
         return False
 
 
-def find_image_on_screen(screenshot_path, threshold=0.7, max_attempts=3, alt_template_paths=None):
+def find_image_on_screen(screenshot_path, threshold=0.8, max_attempts=6, alt_template_paths=None):
     """
     Находит положение изображения на левой половине экрана.
 
@@ -199,16 +199,16 @@ def is_hex_free(check_x, check_y, template_path, region_size=60):
 def check_hexes_around_player(player_pos, hex_template_path):
     """Проверяем 6 гексов вокруг игрока и возвращаем тот, который имеет наибольшее совпадение."""
     x, y = player_pos
-    x += 25  # Сдвигаем центр координат на игрока
-    y += 25
+    x += 20  # Сдвигаем центр координат на игрока
+    y += 20
 
     print(f"Координаты игрока: ({x}, {y})")  # Выводим координаты игрока
 
     # Смещения для 6 гексов вокруг
     hex_offsets = [
-        (25, -25),   # Правый-верхний гекс
+        (30, -30),   # Правый-верхний гекс
         (-50, 0),    # Левый гекс
-        (50, 0),     # Правый гекс
+        (50, 5),     # Правый гекс
         (-25, 25),   # Левый-нижний гекс
         (25, 25),    # Правый-нижний гекс
     ]
@@ -243,12 +243,9 @@ def handle_battle():
     global current_state, stitch_summoned
     player_position = find_image_on_screen(
         screenshot_path=player_template_path,  # Основной шаблон
-        threshold=0.75,  # Порог совпадения
+        threshold=0.8,  # Порог совпадения
         alt_template_paths=alt_icons  # Альтернативные шаблоны
     )
-
-    run_ahk_script('d')
-    time.sleep(0.2)
 
     if player_position:
         run_ahk_script('1')
@@ -266,11 +263,11 @@ def handle_battle():
         run_ahk_script('4')
 
         if stitch_summoned:
-            for _ in range(8):
+            for _ in range(10):
                 if stop_program:
                     break
                 print("Нажимаем 'д' и 'enter'")
-                time.sleep(0.2)
+                time.sleep(0.025)
                 run_ahk_script('d')
                 run_ahk_script('enter')
 
@@ -319,6 +316,5 @@ while not stop_program:
 
     states[current_state]()
     print(f'Текущий статус: {current_state}')
-    time.sleep(0.1)  # Задержка перед следующей проверкой
 
 print("Скрипт завершен.")
