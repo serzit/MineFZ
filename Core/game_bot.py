@@ -6,7 +6,6 @@ import subprocess
 import pyautogui
 import keyboard  # Import the keyboard library
 import threading  # Для многозадачности
-import math
 
 # Параметры
 player_template_path = 'player.png'  # Изображение игрока в бою
@@ -45,65 +44,69 @@ def run_ahk_script(key):
         return False
 
 
-def find_image_on_screen(screenshot_path, threshold=0.8, max_attempts=3, alt_template_path=None):
+def find_image_on_screen(screenshot_path, threshold=0.7, max_attempts=3, alt_template_paths=None):
     """
     Находит положение изображения на левой половине экрана.
 
     Если основной шаблон не найден за указанное количество попыток,
-    выполняется поиск по альтернативному шаблону.
+    выполняется поиск по альтернативным шаблонам.
 
     :param screenshot_path: Путь к основному шаблону
     :param threshold: Пороговое значение для совпадения
     :param max_attempts: Максимальное количество попыток поиска
-    :param alt_template_path: Путь к альтернативному шаблону (опционально)
+    :param alt_template_paths: Список путей к альтернативным шаблонам (опционально)
     :return: Координаты верхнего левого угла найденного изображения или None
     """
+
+    # Функция поиска шаблона в изображении
+    def search_template(template_path, search_area, threshold):
+        template = cv2.imread(template_path, cv2.IMREAD_UNCHANGED)
+        if template is None:
+            raise ValueError(f"Шаблон не найден по пути: {template_path}")
+
+        search_area_gray = cv2.cvtColor(search_area, cv2.COLOR_BGR2GRAY)
+        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+
+        result = cv2.matchTemplate(search_area_gray, template_gray, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+
+        return max_val, max_loc
+
+    # Основной поиск по заданным попыткам
     for attempt in range(max_attempts):
         print(f"Попытка {attempt + 1} поиска шаблона: {screenshot_path}")
         screenshot = pyautogui.screenshot()
         screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
-        # Ограничиваем скриншот левой половиной экрана по X
+        # Ограничиваем скриншот левой половиной экрана
         height, width, _ = screenshot.shape
-        left_half = screenshot[:, :width // 2]  # Левая половина по ширине (X)
+        left_half = screenshot[:, :width // 2]
 
-        # Загружаем шаблон
-        template = cv2.imread(screenshot_path, cv2.IMREAD_UNCHANGED)
-        if template is None:
-            raise ValueError(f"Шаблон не найден по пути: {screenshot_path}")
-
-        # Приводим шаблон и ограниченный скриншот к черно-белому формату
-        left_half_gray = cv2.cvtColor(left_half, cv2.COLOR_BGR2GRAY)
-        template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-
-        # Сравниваем изображения
-        result = cv2.matchTemplate(left_half_gray, template_gray, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
-
+        max_val, max_loc = search_template(screenshot_path, left_half, threshold)
+        print(f"Качество основного изображения: {max_val}")
         if max_val >= threshold:
             print(f"Изображение найдено на попытке {attempt + 1}")
-            print(f"Качество изображения {max_val}")
-            return max_loc  # Верхний левый угол найденного изображения
+            print(f"Качество изображения: {max_val}")
+            return max_loc
 
     print("Основное изображение не найдено.")
 
-    # Если указан альтернативный путь, пробуем его
-    if alt_template_path:
-        print(f"Пробуем найти альтернативный шаблон: {alt_template_path}")
-        alt_template = cv2.imread(alt_template_path, cv2.IMREAD_UNCHANGED)
-        if alt_template is None:
-            raise ValueError(f"Альтернативный шаблон не найден по пути: {alt_template_path}")
+    # Если альтернативные шаблоны указаны, пробуем их
+    if alt_template_paths:
+        for alt_path in alt_template_paths:
+            print(f"Пробуем найти альтернативный шаблон: {alt_path}")
+            screenshot = pyautogui.screenshot()
+            screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
-        alt_template_gray = cv2.cvtColor(alt_template, cv2.COLOR_BGR2GRAY)
-        result = cv2.matchTemplate(left_half_gray, alt_template_gray, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            left_half = screenshot[:, :width // 2]  # Ограничиваем область поиска
+            max_val, max_loc = search_template(alt_path, left_half, threshold)
 
-        if max_val >= threshold:
-            print(f"Альтернативное изображение найдено.")
-            print(f"Качество изображения {max_val}")
-            return max_loc
+            if max_val >= threshold:
+                print(f"Альтернативное изображение найдено: {alt_path}")
+                print(f"Качество изображения: {max_val}")
+                return max_loc
 
-    print("Изображение не найдено ни в основном, ни в альтернативном шаблоне.")
+    print("Изображение не найдено ни в основном, ни в альтернативных шаблонах.")
     return None
     
 def click_relative_to_icon(icon_pos, offset_x):
@@ -238,17 +241,20 @@ def check_hexes_around_player(player_pos, hex_template_path):
 def handle_battle():
     """Обработка состояния 'В БОЮ'."""
     global current_state, stitch_summoned
-    player_position = find_image_on_screen(player_template_path, alt_template_path='player_black.png')
+    player_position = find_image_on_screen(
+        screenshot_path=player_template_path,  # Основной шаблон
+        threshold=0.75,  # Порог совпадения
+        alt_template_paths=alt_icons  # Альтернативные шаблоны
+    )
+
+    run_ahk_script('d')
+    time.sleep(0.2)
 
     if player_position:
         run_ahk_script('1')
-        time.sleep(0.015)
         run_ahk_script('a')
-        time.sleep(0.015)
         run_ahk_script('2')
-        time.sleep(0.015)
         run_ahk_script('a')
-        time.sleep(0.015)
         run_ahk_script('3')
 
         if not stitch_summoned:
