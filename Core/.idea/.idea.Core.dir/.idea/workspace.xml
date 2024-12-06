@@ -2,11 +2,6 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="9fdd2d6b-91a5-4041-9894-7901182b3ca9" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Core.dir/.idea/encodings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Core.dir/.idea/indexLayout.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Core.dir/.idea/projectSettingsUpdater.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Core.dir/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/.idea.Core.dir/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/game_bot.py" beforeDir="false" afterPath="$PROJECT_DIR$/game_bot.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -50,6 +45,7 @@
       <workItem from="1733408230473" duration="303000" />
       <workItem from="1733408543856" duration="23000" />
       <workItem from="1733408721855" duration="81000" />
+      <workItem from="1733478539127" duration="8000" />
     </task>
     <servers />
   </component>
