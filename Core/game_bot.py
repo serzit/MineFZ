@@ -11,7 +11,23 @@ import threading  # Для многозадачности
 
 # Параметры
 player_template_path = 'player.png'  # Изображение игрока в бою
-alt_icons = ["player_alt.png", "player_alt2.png", "player_alt3.png", "player_alt4.png", "player_alt5.png", "player_alt6.png", "player_alt7.png", "player_alt8.png", "player_alt9.png", "player_alt10.png" ,"player_alt11.png","player_alt12.png","player_fullBlack.png", "player_black_bottom.png","player_black_left.png"]
+alt_icons = ["player_alt.png",
+             "player_alt2.png",
+             "player_alt3.png",
+             "player_alt4.png",
+             "player_alt5.png",
+             "player_alt6.png",
+             "player_alt7.png",
+             "player_alt8.png",
+             "player_alt9.png",
+             "player_alt10.png",
+             "player_alt11.png",
+             "player_alt12.png",
+             "player_alt13.png",
+             "player_alt14.png",
+             "player_fullBlack.png",
+             "player_black_bottom.png",
+             "player_black_left.png"]
 
 icon_template_path = 'arrow_down.png'  # Изображение иконки игрока в шахте
 alt_mine_icons = ["arrow_left.png", "arrow_right.png", "arrow_up.png"]
@@ -299,17 +315,13 @@ def handle_battle():
         else:
             print("Стич уже вызван, продолжаем бой.")
 
+        run_ahk_script('5')
+
         if stitch_summoned:
             time.sleep(0.025)
             run_ahk_script('d')
             run_ahk_script('d')
-            for _ in range (6):
-                if stop_program:
-                    break
-                run_ahk_script('leftArrow')
 
-            run_ahk_script('4')
-            
             for _ in range(8):
                 if stop_program:
                     break
@@ -345,6 +357,13 @@ def handle_city():
     global current_state, stop_program
 
     print('Состояние город')
+    for _ in range(5):
+        if stop_program:
+            break
+        run_ahk_script('enter')
+        print("Нажимаем 'д' и 'enter'")
+
+
     pyautogui.moveTo(2165, 200)
     run_ahk_script('clickLeft')
 
@@ -352,23 +371,23 @@ def handle_city():
     if stop_program:
         return
     pyautogui.moveTo(2237, 279)
-    run_ahk_script('4')
-    run_ahk_script('enter')
     run_ahk_script('clickLeft')
 
     time.sleep(8)
     if stop_program:
         return
     run_ahk_script('4')
-
     run_ahk_script('enter')
-    run_ahk_script('clickLeft')
+    run_ahk_script('enter')
+    time.sleep(1)
 
+    run_ahk_script('clickLeft')
     time.sleep(17)
     if stop_program:
         return
 
     run_ahk_script('4')
+    run_ahk_script('enter')
     run_ahk_script('enter')
     run_ahk_script('clickLeft')
     pyautogui.moveTo(893, 361)
@@ -403,6 +422,9 @@ while not stop_program:
     # Проверяем, если нужно остановить программу
     if stop_program:
         break  # Завершаем основной цикл, если установлен флаг остановки
+
+    if not activate_game_window():
+         continue
 
     states[current_state]()
     print(f'Текущий статус: {current_state}')
