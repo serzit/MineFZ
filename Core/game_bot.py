@@ -24,7 +24,7 @@ alt_icons = ["player_alt.png",
              "player_alt11.png",
              "player_alt12.png",
              "player_alt13.png",
-             "player_alt14.png",
+             "player_black_corner.png",
              "player_fullBlack.png",
              "player_black_bottom.png",
              "player_black_left.png"]
@@ -193,7 +193,11 @@ def summon_around_player(player_pos, hex_template_path):
         return  # Если стич уже вызван, ничего не делаем
 
     # Проверяем гексы вокруг игрока
+    start_time = time.time()
     free_hex = check_hexes_around_player(player_pos, hex_template_path)
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Проверка гексов: {execution_time:.2f} секунд")
     print(f"Результат проверки гексов: {free_hex}")  # Лог результата проверки
 
     if free_hex is not None:
@@ -218,29 +222,30 @@ def summon_around_player(player_pos, hex_template_path):
 
 def is_hex_free(check_x, check_y, template_path, region_size=75):
     """Проверка, является ли гекс пустым, используя шаблон."""
-    # Снимаем скриншот и преобразуем в numpy массив
-    screenshot = pyautogui.screenshot()
-    screenshot_np = np.array(screenshot)
-    template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)  # Загружаем шаблон
+    start_time = time.time()
+    region_x1 = max(0, check_x - region_size)
+    region_y1 = max(0, check_y - region_size)
+    width = region_size * 2
+    height = region_size * 2
 
-    # Преобразуем скриншот в оттенки серого
+    # Снимаем скриншот только нужного региона
+    screenshot = pyautogui.screenshot(region=(region_x1, region_y1, width, height))
+    screenshot_np = np.array(screenshot)
+
+    # Преобразуем в оттенки серого
     screenshot_gray = cv2.cvtColor(screenshot_np, cv2.COLOR_BGR2GRAY)
 
-    # Определяем регион вокруг координат
-    region_x1, region_y1 = max(0, check_x - region_size), max(0, check_y - region_size)
-    region_x2, region_y2 = check_x + region_size, check_y + region_size
-
-    # Проверяем границы изображения
-    region = screenshot_gray[region_y1:region_y2, region_x1:region_x2]
-    if region.shape[0] == 0 or region.shape[1] == 0:
-        print(f"Область ({region_x1}, {region_y1}, {region_x2}, {region_y2}) вне экрана.")
-        return False
+    # Загружаем шаблон
+    template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
 
     # Сравниваем с шаблоном
-    result = cv2.matchTemplate(region, template, cv2.TM_CCOEFF_NORMED)
+    result = cv2.matchTemplate(screenshot_gray, template, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, _ = cv2.minMaxLoc(result)
-    print(f"Совпадение с шаблоном для региона ({region_x1}, {region_y1}, {region_x2}, {region_y2}): {max_val}")
-    return max_val  # Возвращаем значение совпадения
+    print(f"Совпадение с шаблоном: {max_val}")
+
+    end_time = time.time()
+    print(f"Время выполнения: {end_time - start_time:.2f} секунд")
+    return max_val
 
 
 def check_hexes_around_player(player_pos, hex_template_path):
@@ -269,10 +274,8 @@ def check_hexes_around_player(player_pos, hex_template_path):
 
         # Проверяем 3 раза текущий гекс
         max_match_val = -1  # Максимальное совпадение для текущего гекса
-        for attempt in range(1, 3):
-            match_val = is_hex_free(check_x, check_y, hex_template_path)
-            print(f"Попытка {attempt}: Совпадение = {match_val}")
-            max_match_val = max(max_match_val, match_val)
+        match_val = is_hex_free(check_x, check_y, hex_template_path)
+        max_match_val = max(max_match_val, match_val)
 
         print(f"Максимальное совпадение для гекса ({check_x}, {check_y}) = {max_match_val}")
 
@@ -293,6 +296,8 @@ def check_hexes_around_player(player_pos, hex_template_path):
 def handle_battle():
     """Обработка состояния 'В БОЮ'."""
     global current_state, stitch_summoned
+    start_time = time.time()
+
     player_position = find_image_on_screen(
         screenshot_path=player_template_path,  # Основной шаблон
         threshold=0.82,  # Порог совпадения
@@ -311,7 +316,11 @@ def handle_battle():
 
         if not stitch_summoned:
             print("Вызов стича...")
+            start_time = time.time()
             summon_around_player(player_position, hex_template_path)
+            end_time = time.time()
+            execution_time = end_time - start_time
+            print(f"Вызов стича: {execution_time:.2f} секунд")
         else:
             print("Стич уже вызван, продолжаем бой.")
 
@@ -331,12 +340,18 @@ def handle_battle():
                 run_ahk_script('enter')
 
         print("Бой завершен, возвращаемся в шахту.")
+
         current_state = STATE_MINE  # Переходим в шахту
         stitch_summoned = False  # Сбрасываем состояние для следующего боя
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Бой занял: {execution_time:.2f} секунд")
 
 def handle_mine():
     """Обработка состояния 'В ШАХТЕ'."""
     global stop_program, current_state
+    start_time = time.time()
 
     icon_position = find_image_on_screen(
         icon_template_path,
@@ -352,6 +367,10 @@ def handle_mine():
         print("Перемещаемся по шахте")
     else:
         current_state = STATE_CITY
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Передвижение по шахте: {execution_time:.2f} секунд")
 
 def handle_city():
     global current_state, stop_program
