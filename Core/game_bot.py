@@ -11,16 +11,17 @@ import threading  # Для многозадачности
 
 # Параметры
 player_template_path = 'player.png'  # Изображение игрока в бою
-alt_icons = ["player_alt.png", "player_alt2.png", "player_alt3.png", "player_alt4.png", "player_alt5.png", "player_alt6.png", "player_alt7.png", "player_alt8.png", "player_alt9.png", "player_alt10.png" ,"player_alt11.png","player_fullBlack.png", "player_black_bottom.png","player_black_left.png"]
+alt_icons = ["player_alt.png", "player_alt2.png", "player_alt3.png", "player_alt4.png", "player_alt5.png", "player_alt6.png", "player_alt7.png", "player_alt8.png", "player_alt9.png", "player_alt10.png" ,"player_alt11.png","player_alt12.png","player_fullBlack.png", "player_black_bottom.png","player_black_left.png"]
 
-icon_template_path = 'player_icon.png'  # Изображение иконки игрока в шахте
+icon_template_path = 'arrow_down.png'  # Изображение иконки игрока в шахте
+alt_mine_icons = ["arrow_left.png", "arrow_right.png", "arrow_up.png"]
 hex_template_path = 'empty_hex.png'  # Шаблон свободного гекса
-click_offset = -50  # Начальное смещение для клика (левее)
 ahk_scripts_path = r'C:\Bot\Core\HotKeys'  # Путь к AHK-скриптам
 
 # Состояния
 STATE_BATTLE = "В БОЮ"
 STATE_MINE = "В ШАХТЕ"
+STATE_CITY = "В ГОРОДЕ"
 current_state = STATE_MINE
 stitch_summoned = False
 MAX_X = 1200  # Максимальное значение X
@@ -109,8 +110,34 @@ def find_image_on_screen(screenshot_path, threshold=0.8, max_attempts=6, alt_tem
                 print(f"Совпадение изображения: {max_val}")
                 return max_loc
 
+    if alt_template_paths:
+        for alt_path in alt_template_paths:
+            print(f"Пробуем найти альтернативный шаблон: {alt_path}")
+            max_match_val = -1  # Изначально максимальное совпадение отсутствует
+            best_loc = None  # Координаты наилучшего совпадения
+
+            for attempt in range(1, 4):  # Три попытки
+                print(f"Попытка {attempt} для шаблона {alt_path}")
+                screenshot = pyautogui.screenshot()
+                screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+
+                left_half = screenshot[:, :width // 2]  # Ограничиваем область поиска
+                match_val, match_loc = search_template(alt_path, left_half, threshold)
+                print(f"Совпадение альтернативного изображения: {match_val}")
+
+                # Обновляем лучшее совпадение, если текущее значение больше
+                if match_val > max_match_val:
+                    max_match_val = match_val
+                    best_loc = match_loc
+
+            # Проверяем результат после трёх попыток
+            if max_match_val >= threshold:
+                print(f"Альтернативное изображение найдено: {alt_path}")
+                print(f"Максимальное совпадение изображения: {max_match_val}")
+                return best_loc
+
     print("Изображение не найдено ни в основном, ни в альтернативных шаблонах.")
-    stop_program = True
+
     return None
     
 def click_relative_to_icon(icon_pos, offset_x):
@@ -173,7 +200,7 @@ def summon_around_player(player_pos, hex_template_path):
         print("Свободных гексов не найдено. Стич не вызван.")
 
 
-def is_hex_free(check_x, check_y, template_path, region_size=60):
+def is_hex_free(check_x, check_y, template_path, region_size=75):
     """Проверка, является ли гекс пустым, используя шаблон."""
     # Снимаем скриншот и преобразуем в numpy массив
     screenshot = pyautogui.screenshot()
@@ -210,10 +237,10 @@ def check_hexes_around_player(player_pos, hex_template_path):
 
     # Смещения для 6 гексов вокруг
     hex_offsets = [
-        (30, -30),   # Правый-верхний гекс
-        (-40, 0),    # Левый гекс
-        (50, 5),     # Правый гекс
-        (-25, 25),   # Левый-нижний гекс
+        (30, -30),  # Правый-верхний гекс
+        (-40, 0),  # Левый гекс
+        (50, 5),  # Правый гекс
+        (-25, 25),  # Левый-нижний гекс
     ]
 
     best_match = -1  # Изначально наилучшее совпадение - отсутствует
@@ -224,20 +251,26 @@ def check_hexes_around_player(player_pos, hex_template_path):
         check_x, check_y = x + dx, y + dy
         print(f"Проверка {counter} на гекс с координатами: ({check_x}, {check_y})")
 
-        # Получаем коэффициент совпадения для текущего гекса
-        match_val = is_hex_free(check_x, check_y, hex_template_path)
-        
-        # Если текущее совпадение лучше, обновляем переменные
-        if match_val > best_match:
-            best_match = match_val
+        # Проверяем 3 раза текущий гекс
+        max_match_val = -1  # Максимальное совпадение для текущего гекса
+        for attempt in range(1, 3):
+            match_val = is_hex_free(check_x, check_y, hex_template_path)
+            print(f"Попытка {attempt}: Совпадение = {match_val}")
+            max_match_val = max(max_match_val, match_val)
+
+        print(f"Максимальное совпадение для гекса ({check_x}, {check_y}) = {max_match_val}")
+
+        # Если максимальное совпадение для текущего гекса лучше, обновляем переменные
+        if max_match_val > best_match:
+            best_match = max_match_val
             best_coordinates = (check_x, check_y)
-            print(f"Гекс с наибольшим совпадением на координатах: ({check_x}, {check_y}), Совпадение: {best_match}")
+            print(f"Обновлён лучший гекс: ({check_x}, {check_y}) с совпадением {best_match}")
 
     if best_coordinates:
         print(f"Гекс с наибольшим совпадением найден на координатах: {best_coordinates}, Совпадение: {best_match}")
     else:
         print("Свободных гексов не найдено.")
-    
+
     return best_coordinates  # Возвращаем координаты гекса с наибольшим совпадением
 
 
@@ -246,7 +279,7 @@ def handle_battle():
     global current_state, stitch_summoned
     player_position = find_image_on_screen(
         screenshot_path=player_template_path,  # Основной шаблон
-        threshold=0.85,  # Порог совпадения
+        threshold=0.82,  # Порог совпадения
         alt_template_paths=alt_icons  # Альтернативные шаблоны
     )
 
@@ -266,10 +299,18 @@ def handle_battle():
         else:
             print("Стич уже вызван, продолжаем бой.")
 
-        run_ahk_script('4')
-
         if stitch_summoned:
-            for _ in range(10):
+            time.sleep(0.025)
+            run_ahk_script('d')
+            run_ahk_script('d')
+            for _ in range (6):
+                if stop_program:
+                    break
+                run_ahk_script('leftArrow')
+
+            run_ahk_script('4')
+            
+            for _ in range(8):
                 if stop_program:
                     break
                 print("Нажимаем 'д' и 'enter'")
@@ -283,18 +324,59 @@ def handle_battle():
 
 def handle_mine():
     """Обработка состояния 'В ШАХТЕ'."""
-    global click_offset, current_state
-    
-    for _ in range(3):
-        run_ahk_script('enter')
-        
-    icon_position = find_image_on_screen(icon_template_path)
+    global stop_program, current_state
+
+    icon_position = find_image_on_screen(
+        icon_template_path,
+        threshold=0.85,
+        max_attempts=3,
+        alt_template_paths=alt_mine_icons)
+
     if icon_position:
-        click_relative_to_icon(icon_position, click_offset)
-        run_ahk_script('enter')
-        click_offset = -50 if click_offset > 0 else 100  # Чередование направлений
-        current_state = STATE_BATTLE  # Переходим к поиску боя
+        x, y = icon_position
+        pyautogui.moveTo(x, y)
+        run_ahk_script('clickLeft')
+        current_state = STATE_BATTLE
         print("Перемещаемся по шахте")
+    else:
+        current_state = STATE_CITY
+
+def handle_city():
+    global current_state, stop_program
+
+    print('Состояние город')
+    pyautogui.moveTo(2165, 200)
+    run_ahk_script('clickLeft')
+
+    time.sleep(8)
+    if stop_program:
+        return
+    pyautogui.moveTo(2237, 279)
+    run_ahk_script('4')
+    run_ahk_script('enter')
+    run_ahk_script('clickLeft')
+
+    time.sleep(8)
+    if stop_program:
+        return
+    run_ahk_script('4')
+
+    run_ahk_script('enter')
+    run_ahk_script('clickLeft')
+
+    time.sleep(17)
+    if stop_program:
+        return
+
+    run_ahk_script('4')
+    run_ahk_script('enter')
+    run_ahk_script('clickLeft')
+    pyautogui.moveTo(893, 361)
+    time.sleep(0.5)
+    run_ahk_script('clickLeft')
+
+    current_state = STATE_MINE
+    print('Дошли до шахты')
 
 # Функция для отслеживания нажатия клавиши 'S'
 def listen_for_stop():
@@ -312,8 +394,9 @@ stop_thread.start()
 
 # Основной цикл
 states = {
-    STATE_BATTLE: handle_battle,
     STATE_MINE: handle_mine,
+    STATE_BATTLE: handle_battle,
+    STATE_CITY: handle_city,
 }
 
 while not stop_program:
