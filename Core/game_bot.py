@@ -62,23 +62,26 @@ def run_ahk_script(key):
         return False
 
 
-def find_image_on_screen(screenshot_path, threshold=0.8, max_attempts=6, alt_template_paths=None):
+def find_image_on_screen(
+    screenshot_path,
+    threshold=0.8,
+    max_attempts=6,
+    alt_template_paths=None,
+    search_region=(0, 0, 1280, 1600)
+):
     """
-    Находит положение изображения на левой половине экрана.
-
-    Если основной шаблон не найден за указанное количество попыток,
-    выполняется поиск по альтернативным шаблонам.
+    Находит положение изображения в указанной области экрана.
 
     :param screenshot_path: Путь к основному шаблону
     :param threshold: Пороговое значение для совпадения
     :param max_attempts: Максимальное количество попыток поиска
     :param alt_template_paths: Список путей к альтернативным шаблонам (опционально)
+    :param search_region: Координаты области поиска (x1, y1, x2, y2)
     :return: Координаты верхнего левого угла найденного изображения или None
     """
-    global stop_program
 
-    # Функция поиска шаблона в изображении
     def search_template(template_path, search_area, threshold):
+        """Поиск изображения в переданной области поиска."""
         template = cv2.imread(template_path, cv2.IMREAD_UNCHANGED)
         if template is None:
             raise ValueError(f"Шаблон не найден по пути: {template_path}")
@@ -91,78 +94,100 @@ def find_image_on_screen(screenshot_path, threshold=0.8, max_attempts=6, alt_tem
 
         return max_val, max_loc
 
-    # Основной поиск по заданным попыткам
-    for attempt in range(max_attempts):
-        print(f"Попытка {attempt + 1} поиска шаблона: {screenshot_path}")
-        screenshot = pyautogui.screenshot()
-        screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+    def search_primary_attempts():
+        """Основной цикл поиска по основному шаблону."""
+        x1, y1, x2, y2 = search_region
 
-        # Ограничиваем скриншот левой половиной экрана
-        height, width, _ = screenshot.shape
-        left_half = screenshot[:, :width // 2]
+        for attempt in range(max_attempts):
+            print(f"Попытка {attempt + 1} поиска основного шаблона: {screenshot_path}")
+            screenshot = pyautogui.screenshot()
+            screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
-        max_val, max_loc = search_template(screenshot_path, left_half, threshold)
-        print(f"Совпадение основного изображения: {max_val}")
-        if max_val >= threshold:
-            print(f"Изображение найдено на попытке {attempt + 1}")
-            print(f"Совпадение изображения: {max_val}")
-            return max_loc
+            # Ограничиваем область поиска основной областью
+            search_area = screenshot[y1:y2, x1:x2]
 
-    print("Основное изображение не найдено.")
+            max_val, max_loc = search_template(screenshot_path, search_area, threshold)
+            print(f"Совпадение основного изображения: {max_val}")
 
-    # Если альтернативные шаблоны указаны, пробуем их
-    if alt_template_paths:
+            if max_val >= threshold:
+                # Преобразуем координаты из локальной области в экранные координаты
+                screen_loc = (max_loc[0] + x1, max_loc[1] + y1)
+                print(f"Изображение найдено на координатах: {screen_loc}")
+                return screen_loc
+
+        print("Основное изображение не найдено после всех попыток.")
+        return None
+
+    def search_single_alternative():
+        """Однократный поиск по альтернативным шаблонам."""
+        x1, y1, x2, y2 = search_region
+
         for alt_path in alt_template_paths:
             print(f"Пробуем найти альтернативный шаблон: {alt_path}")
             screenshot = pyautogui.screenshot()
             screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
-            left_half = screenshot[:, :width // 2]  # Ограничиваем область поиска
-            max_val, max_loc = search_template(alt_path, left_half, threshold)
-            print(f"Совпадение альтернативного изображения: {max_val}")
-            if max_val >= threshold:
-                print(f"Альтернативное изображение найдено: {alt_path}")
-                print(f"Совпадение изображения: {max_val}")
-                return max_loc
+            # Ограничиваем область поиска для поиска альтернативного шаблона
+            search_area = screenshot[y1:y2, x1:x2]
+            match_val, match_loc = search_template(alt_path, search_area, threshold)
+            print(f"Совпадение альтернативного изображения: {match_val}")
 
-    if alt_template_paths:
+            if match_val >= threshold:
+                screen_loc = (match_loc[0] + x1, match_loc[1] + y1)
+                print(f"Альтернативное изображение найдено: {screen_loc}")
+                return screen_loc
+
+        print("Альтернативные шаблоны не сработали.")
+        return None
+
+    def search_deep_alternatives():
+        """Углубленный поиск по всем альтернативным шаблонам."""
+        x1, y1, x2, y2 = search_region
+        best_match_val = -1
+        best_match_loc = None
+
         for alt_path in alt_template_paths:
-            print(f"Пробуем найти альтернативный шаблон: {alt_path}")
-            max_match_val = -1  # Изначально максимальное совпадение отсутствует
-            best_loc = None  # Координаты наилучшего совпадения
-
-            for attempt in range(1, 4):  # Три попытки
-                print(f"Попытка {attempt} для шаблона {alt_path}")
+            print(f"Пробуем углубленный поиск по шаблону: {alt_path}")
+            for attempt in range(3):  # Попытки повторного поиска
+                print(f"Попытка {attempt + 1} для шаблона {alt_path}")
                 screenshot = pyautogui.screenshot()
                 screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
-                left_half = screenshot[:, :width // 2]  # Ограничиваем область поиска
-                match_val, match_loc = search_template(alt_path, left_half, threshold)
+                search_area = screenshot[y1:y2, x1:x2]
+                match_val, match_loc = search_template(alt_path, search_area, threshold)
                 print(f"Совпадение альтернативного изображения: {match_val}")
 
-                # Обновляем лучшее совпадение, если текущее значение больше
-                if match_val > max_match_val:
-                    max_match_val = match_val
-                    best_loc = match_loc
+                if match_val > best_match_val:
+                    best_match_val = match_val
+                    best_match_loc = match_loc
 
-            # Проверяем результат после трёх попыток
-            if max_match_val >= threshold:
-                print(f"Альтернативное изображение найдено: {alt_path}")
-                print(f"Максимальное совпадение изображения: {max_match_val}")
-                return best_loc
+        if best_match_val >= threshold:
+            screen_loc = (best_match_loc[0] + x1, best_match_loc[1] + y1)
+            print(f"Углубленный поиск нашел изображение: {screen_loc}")
+            return screen_loc
 
-    print("Изображение не найдено ни в основном, ни в альтернативных шаблонах.")
+        print("Углубленный поиск не нашел изображение.")
+        return None
 
+    # 1. Попытка найти изображение основным методом
+    location = search_primary_attempts()
+    if location:
+        return location
+
+    # 2. Если не найдено, пробуем однократный альтернативный поиск
+    if alt_template_paths:
+        location = search_single_alternative()
+        if location:
+            return location
+
+        # 3. Если и это не помогло, проводим углубленный поиск
+        location = search_deep_alternatives()
+        if location:
+            return location
+
+    # Если ничего не помогло
+    print("Изображение не найдено ни одним из методов.")
     return None
-    
-def click_relative_to_icon(icon_pos, offset_x):
-    """Кликает относительно найденной иконки."""
-    if icon_pos:
-        x, y = icon_pos
-        pyautogui.moveTo(x + offset_x, y + 10)  # Передвигаем курсор
-        run_ahk_script('clickLeft')  # Кликаем через AHK
-        return True
-    return False
 
 def activate_game_window():
     """Активирует окно игры с названием 'TimeZero' только один раз."""
@@ -323,7 +348,8 @@ def handle_battle():
     player_position = find_image_on_screen(
         screenshot_path=player_template_path,  # Основной шаблон
         threshold=0.82,  # Порог совпадения
-        alt_template_paths=alt_icons  # Альтернативные шаблоны
+        alt_template_paths=alt_icons,  # Альтернативные шаблоны
+        search_region=(300,150,1350,950)
     )
     endTime_image = time.time()
     exe_time = endTime_image - start_time
@@ -365,10 +391,6 @@ def handle_battle():
         current_state = STATE_MINE  # Переходим в шахту
         stitch_summoned = False  # Сбрасываем состояние для следующего боя
 
-    end_time = time.time()
-    execution_time = end_time - start_time
-    print(f"Бой занял: {execution_time:.2f} секунд")
-
 def handle_mine():
     """Обработка состояния 'В ШАХТЕ'."""
     global stop_program, current_state
@@ -377,10 +399,11 @@ def handle_mine():
     icon_position = find_image_on_screen(
         icon_template_path,
         threshold=0.85,
-        max_attempts=3,
-        alt_template_paths=alt_mine_icons)
-    endTime_image = time.time()
-    exe_time = endTime_image - start_time
+        max_attempts=1,
+        alt_template_paths=alt_mine_icons,
+        search_region=(300, 350, 850, 850))
+    end_time_image = time.time()
+    exe_time = end_time_image - start_time
     print(f"Поиск в шахте: {exe_time:.2f} секунд")
 
     if icon_position:
@@ -467,9 +490,19 @@ while not stop_program:
         break  # Завершаем основной цикл, если установлен флаг остановки
 
     if not activate_game_window():
-         continue
+        continue
 
+    # Замеряем время начала
+    start_time = time.time()
+
+    # Выполняем текущее состояние
     states[current_state]()
-    print(f'Текущий статус: {current_state}')
+
+    # Замеряем время после выполнения состояния
+    end_time = time.time()
+
+    # Рассчитываем, сколько времени было затрачено
+    elapsed_time = end_time - start_time
+    print(f"Текущий статус: {current_state}, Время выполнения: {elapsed_time:.4f} сек")
 
 print("Скрипт завершен.")
