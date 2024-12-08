@@ -1,6 +1,5 @@
 import time
-from time import sleep
-
+from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 import pygetwindow as gw
@@ -209,7 +208,7 @@ def summon_around_player(player_pos, hex_template_path):
         print(f"Свободный гекс найден на координатах: {free_hex}")
         # Зажимаем CTRL, перемещаем мышку и кликаем
         run_ahk_script('ctrlDown')  # Зажимаем CTRL
-        time.sleep(0.05)
+        time.sleep(0.025)
         try:
             pyautogui.moveTo(free_hex[0], free_hex[1])  # Перемещаем курсор в свободный гекс
             run_ahk_script('clickLeft')  # Кликаем
@@ -248,49 +247,72 @@ def is_hex_free(check_x, check_y, template_path, region_size=75):
     return max_val
 
 
-def check_hexes_around_player(player_pos, hex_template_path):
+def is_hex_free(check_x, check_y, template, screenshot_gray, region_size=75):
+    """Проверка, является ли гекс пустым, используя шаблон."""
+    region_x1 = max(0, check_x - region_size)
+    region_y1 = max(0, check_y - region_size)
+    region_x2 = check_x + region_size
+    region_y2 = check_y + region_size
+
+    region = screenshot_gray[region_y1:region_y2, region_x1:region_x2]
+    if region.size == 0:
+        return -1  # Если регион пустой, возвращаем минимальное значение
+
+    result = cv2.matchTemplate(region, template, cv2.TM_CCOEFF_NORMED)
+    _, max_val, _, _ = cv2.minMaxLoc(result)
+    return max_val
+
+
+def check_single_hex(args):
+    """Функция для проверки одного гекса (для параллельной обработки)."""
+    check_x, check_y, template, screenshot_gray = args
+    return check_x, check_y, is_hex_free(check_x, check_y, template, screenshot_gray)
+
+
+def check_hexes_around_player(player_pos, hex_template_path, early_stop_threshold=0.9):
     """Проверяем 6 гексов вокруг игрока и возвращаем тот, который имеет наибольшее совпадение."""
     x, y = player_pos
-    x += 20  # Сдвигаем центр координат на игрока
+    x += 20
     y += 20
 
-    print(f"Координаты игрока: ({x}, {y})")  # Выводим координаты игрока
+    # Снимаем один скриншот
+    screenshot = pyautogui.screenshot()
+    screenshot_np = np.array(screenshot)
+    screenshot_gray = cv2.cvtColor(screenshot_np, cv2.COLOR_BGR2GRAY)
 
-    # Смещения для 6 гексов вокруг
+    # Загружаем шаблон один раз
+    template = cv2.imread(hex_template_path, cv2.IMREAD_GRAYSCALE)
+
+    # Смещения для гексов
     hex_offsets = [
         (30, -30),  # Правый-верхний гекс
-        (-40, 0),  # Левый гекс
-        (50, 5),  # Правый гекс
+        (-40, 0),   # Левый гекс
+        (50, 5),    # Правый гекс
         (-25, 25),  # Левый-нижний гекс
     ]
 
-    best_match = -1  # Изначально наилучшее совпадение - отсутствует
-    best_coordinates = None  # Изначально координаты не определены
+    args = [(x + dx, y + dy, template, screenshot_gray) for dx, dy in hex_offsets]
+    best_match = -1
+    best_coordinates = None
 
-    # Проверяем каждый гекс
-    for counter, (dx, dy) in enumerate(hex_offsets, start=1):
-        check_x, check_y = x + dx, y + dy
-        print(f"Проверка {counter} на гекс с координатами: ({check_x}, {check_y})")
+    # Параллельная проверка гексов
+    with ThreadPoolExecutor() as executor:
+        results = executor.map(check_single_hex, args)
 
-        # Проверяем 3 раза текущий гекс
-        max_match_val = -1  # Максимальное совпадение для текущего гекса
-        match_val = is_hex_free(check_x, check_y, hex_template_path)
-        max_match_val = max(max_match_val, match_val)
-
-        print(f"Максимальное совпадение для гекса ({check_x}, {check_y}) = {max_match_val}")
-
-        # Если максимальное совпадение для текущего гекса лучше, обновляем переменные
-        if max_match_val > best_match:
-            best_match = max_match_val
+    # Обработка результатов
+    for check_x, check_y, match_val in results:
+        if match_val > best_match:
+            best_match = match_val
             best_coordinates = (check_x, check_y)
-            print(f"Обновлён лучший гекс: ({check_x}, {check_y}) с совпадением {best_match}")
+            if best_match >= early_stop_threshold:
+                break  # Если превышен порог, выходим раньше
 
     if best_coordinates:
-        print(f"Гекс с наибольшим совпадением найден на координатах: {best_coordinates}, Совпадение: {best_match}")
+        print(f"Лучший гекс: {best_coordinates} с совпадением {best_match}")
     else:
         print("Свободных гексов не найдено.")
 
-    return best_coordinates  # Возвращаем координаты гекса с наибольшим совпадением
+    return best_coordinates
 
 
 def handle_battle():
@@ -303,9 +325,12 @@ def handle_battle():
         threshold=0.82,  # Порог совпадения
         alt_template_paths=alt_icons  # Альтернативные шаблоны
     )
+    endTime_image = time.time()
+    exe_time = endTime_image - start_time
+    print(f"Поиск персонажа в бою: {exe_time:.2f} секунд")
 
     run_ahk_script('d')
-    time.sleep(0.2)
+    time.sleep(0.05)
 
     if player_position:
         run_ahk_script('1')
@@ -327,15 +352,11 @@ def handle_battle():
         run_ahk_script('5')
 
         if stitch_summoned:
-            time.sleep(0.025)
-            run_ahk_script('d')
-            run_ahk_script('d')
-
             for _ in range(8):
                 if stop_program:
                     break
                 print("Нажимаем 'д' и 'enter'")
-                time.sleep(0.025)
+                time.sleep(0.01)
                 run_ahk_script('d')
                 run_ahk_script('enter')
 
@@ -358,6 +379,9 @@ def handle_mine():
         threshold=0.85,
         max_attempts=3,
         alt_template_paths=alt_mine_icons)
+    endTime_image = time.time()
+    exe_time = endTime_image - start_time
+    print(f"Поиск в шахте: {exe_time:.2f} секунд")
 
     if icon_position:
         x, y = icon_position
