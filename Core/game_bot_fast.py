@@ -362,11 +362,7 @@ def handle_battle():
     time.sleep(0.05)
 
     if player_position:
-        run_ahk_script('1')
-        run_ahk_script('a')
-        run_ahk_script('2')
-        run_ahk_script('a')
-        run_ahk_script('3')
+        run_ahk_script('skills')
 
         if not stitch_summoned:
             print("Вызов стича...")
@@ -381,13 +377,14 @@ def handle_battle():
         run_ahk_script('5')
 
         if stitch_summoned:
-            for _ in range(8):
+            run_ahk_script('8d')
+            """for _ in range(8):
                 if stop_program:
                     break
                 print("Нажимаем 'д' и 'enter'")
-                time.sleep(0.01)
+                time.sleep(0.001)
                 run_ahk_script('d')
-                run_ahk_script('enter')
+                run_ahk_script('enter')"""
 
         print("Бой завершен, возвращаемся в шахту.")
 
