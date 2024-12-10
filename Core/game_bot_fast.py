@@ -9,6 +9,8 @@ import keyboard  # Import the keyboard library
 import threading  # Для многозадачности
 
 # Параметры
+warehouse_template_path = "warehouse.png"
+player_cover_path = "player_covered.png"
 player_template_path = 'player.png'  # Изображение игрока в бою
 alt_icons = ["player_alt.png",
              "player_alt2.png",
@@ -42,6 +44,7 @@ ahk_scripts_path = r'C:\Bot\Core\HotKeys'  # Путь к AHK-скриптам
 STATE_BATTLE = "В БОЮ"
 STATE_MINE = "В ШАХТЕ"
 STATE_CITY = "В ГОРОДЕ"
+STATE_SYNC = "СИНХРОНИЗАЦИЯ"
 current_state = STATE_MINE
 stitch_summoned = False
 MAX_X = 1200  # Максимальное значение X
@@ -238,7 +241,7 @@ def summon_around_player(player_pos, hex_template_path):
         print(f"Свободный гекс найден на координатах: {free_hex}")
         # Зажимаем CTRL, перемещаем мышку и кликаем
         run_ahk_script('ctrlDown')  # Зажимаем CTRL
-        time.sleep(0.02)
+        time.sleep(0.025)
         try:
             pyautogui.moveTo(free_hex[0], free_hex[1])  # Перемещаем курсор в свободный гекс
             run_ahk_script('clickLeft')  # Кликаем
@@ -358,8 +361,8 @@ def handle_battle():
     exe_time = endTime_image - start_time
     print(f"Поиск персонажа в бою: {exe_time:.2f} секунд")
 
-    run_ahk_script('d')
-    time.sleep(0.05)
+    #run_ahk_script('d')
+    #time.sleep(0.1)
 
     if player_position:
         run_ahk_script('skills')
@@ -374,9 +377,8 @@ def handle_battle():
         else:
             print("Стич уже вызван, продолжаем бой.")
 
-        run_ahk_script('5')
-
         if stitch_summoned:
+            run_ahk_script('5')
             run_ahk_script('8d')
             """for _ in range(8):
                 if stop_program:
@@ -415,7 +417,7 @@ def handle_mine():
         current_state = STATE_BATTLE
         print("Перемещаемся по шахте")
     else:
-        current_state = STATE_CITY
+        current_state = STATE_SYNC
 
     end_time = time.time()
     execution_time = end_time - start_time
@@ -425,12 +427,7 @@ def handle_city():
     global current_state, stop_program
 
     print('Состояние город')
-    for _ in range(5):
-        if stop_program:
-            break
-        run_ahk_script('enter')
-        print("Нажимаем 'д' и 'enter'")
-
+    run_ahk_script('enter_3')
 
     pyautogui.moveTo(2165, 200)
     run_ahk_script('clickLeft')
@@ -465,6 +462,40 @@ def handle_city():
     current_state = STATE_MINE
     print('Дошли до шахты')
 
+def handle_sync():
+    global current_state
+
+    print('Попытка синхронизации состояний')
+    run_ahk_script('8d')
+
+    warehouse_position = find_image_on_screen(warehouse_template_path, threshold=0.85, max_attempts=5)
+
+    if warehouse_position:
+        current_state = STATE_CITY
+        return
+
+    icon_position = find_image_on_screen(icon_template_path,
+        threshold=0.85,
+        max_attempts=1,
+        alt_template_paths=alt_mine_icons,
+        search_region=(300, 350, 850, 850))
+
+    if icon_position:
+        current_state = STATE_MINE
+        return
+
+    player_position = find_image_on_screen(
+        screenshot_path=player_template_path,  # Основной шаблон
+        threshold=0.82,  # Порог совпадения
+        alt_template_paths=alt_icons,  # Альтернативные шаблоны
+        search_region=(300,150,1350,950)
+    )
+
+    if player_position:
+        current_state = STATE_BATTLE
+        return
+
+
 # Функция для отслеживания нажатия клавиши 'S'
 def listen_for_stop():
     global stop_program
@@ -484,6 +515,7 @@ states = {
     STATE_MINE: handle_mine,
     STATE_BATTLE: handle_battle,
     STATE_CITY: handle_city,
+    STATE_SYNC: handle_sync
 }
 
 while not stop_program:

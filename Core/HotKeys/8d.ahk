@@ -18,3 +18,6 @@ Send {d}
 Send, {enter}
 Send {d}
 Send, {enter}
+Send {d}
+Send, {enter}
+Send {d}
